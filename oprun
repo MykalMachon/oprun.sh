@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # oprun - A wrapper script to emulate `op run` using `op inject`
 # Works around WSL issues where `op run` executes in Windows context
