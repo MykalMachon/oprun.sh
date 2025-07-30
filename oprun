@@ -1,0 +1,167 @@
+#!/bin/bash
+
+# oprun - A wrapper script to emulate `op run` using `op inject`
+# Works around WSL issues where `op run` executes in Windows context
+#
+# Usage: oprun [OPTIONS] -- COMMAND [ARGS...]
+#        oprun COMMAND [ARGS...]
+#
+# Examples:
+#   oprun npm run start
+#   oprun -- docker-compose up
+#   oprun -e secrets.env -- python manage.py runserver
+#   oprun -h
+
+set -e
+
+# Default values
+ENV_FILE=".env.template"
+SHOW_HELP=false
+
+# Color codes for output (only if terminal supports it)
+if [[ -t 1 ]] && [[ "${TERM:-}" != "dumb" ]]; then
+	RED='\033[0;31m'
+	GREEN='\033[0;32m'
+	YELLOW='\033[1;33m'
+	BLUE='\033[0;34m'
+	NC='\033[0m' # No Color
+else
+	RED=''
+	GREEN=''
+	YELLOW=''
+	BLUE=''
+	NC=''
+fi
+
+# Help message
+show_help() {
+	cat << EOF
+${BLUE}oprun${NC} - 1Password inject wrapper (WSL-friendly op run alternative)
+
+${YELLOW}USAGE:${NC}
+	oprun [OPTIONS] [--] COMMAND [ARGS...]
+
+${YELLOW}OPTIONS:${NC}
+	-e, --env-file FILE   Use specified env file (default: .env.template)
+	-h, --help            Show this help message
+	-v, --verbose         Show loaded environment variables (for debugging)
+
+${YELLOW}EXAMPLES:${NC}
+	oprun npm run start
+	oprun -- docker-compose up
+	oprun -e secrets.env -- python manage.py runserver
+	oprun -v npm run test
+
+${YELLOW}ENV FILE FORMAT:${NC}
+	Create a .env.template file with 1Password secret references:
+	
+	DATABASE_URL="op://vault-name/item-name/field-name"
+	API_KEY="op://student-services-prod/API Key: External Service/password"
+	
+${YELLOW}SETUP:${NC}
+	1. Make sure 1Password CLI is installed and authenticated
+	2. Create a .env.template file in your project
+	3. Run: oprun your-command
+
+EOF
+}
+
+# Parse command line arguments
+VERBOSE=false
+while [[ $# -gt 0 ]]; do
+	case $1 in
+		-h|--help)
+			show_help
+			exit 0
+			;;
+		-e|--env-file)
+			ENV_FILE="$2"
+			shift 2
+			;;
+		-v|--verbose)
+			VERBOSE=true
+			shift
+			;;
+		--)
+			shift
+			break
+			;;
+		-*)
+			echo -e "${RED}Error: Unknown option $1${NC}" >&2
+			echo "Use -h or --help for usage information" >&2
+			exit 1
+			;;
+		*)
+			# First non-option argument, assume it's the start of the command
+			break
+			;;
+	esac
+done
+
+# Check if we have a command to run
+if [[ $# -eq 0 ]]; then
+	echo -e "${RED}Error: No command specified${NC}" >&2
+	echo "Use -h or --help for usage information" >&2
+	exit 1
+fi
+
+# Check if env file exists
+if [[ ! -f "$ENV_FILE" ]]; then
+	echo -e "${RED}Error: Env file '$ENV_FILE' not found${NC}" >&2
+	echo -e "${YELLOW}Create an env file with your 1Password secret references:${NC}" >&2
+	echo 'DATABASE_URL="op://vault-name/item-name/field-name"' >&2
+	echo 'API_KEY="op://vault-name/item-name/password"' >&2
+	exit 1
+fi
+
+# Check if op CLI is available, with fallback to op.exe (for WSL)
+OP_CMD="op"
+if ! command -v op &> /dev/null; then
+	if command -v op.exe &> /dev/null; then
+		OP_CMD="op.exe"
+		echo -e "${YELLOW}Using Windows 1Password CLI (op.exe) from WSL${NC}"
+	else
+		echo -e "${RED}Error: 1Password CLI not found${NC}" >&2
+		echo "Tried: 'op' and 'op.exe'" >&2
+		echo "Please install 1Password CLI: https://developer.1password.com/docs/cli/get-started/" >&2
+		exit 1
+	fi
+fi
+
+# Check if user is signed in to 1Password
+if ! $OP_CMD account list &> /dev/null; then
+	echo -e "${RED}Error: Not signed in to 1Password${NC}" >&2
+	echo "Please run: $OP_CMD signin" >&2
+	exit 1
+fi
+
+echo -e "${BLUE}Loading secrets from $ENV_FILE...${NC}"
+
+# Inject secrets and capture the result
+if ! env_vars=$($OP_CMD inject -i "$ENV_FILE" 2>/dev/null); then
+	echo -e "${RED}Error: Failed to inject secrets from 1Password${NC}" >&2
+	echo "Check your env file and 1Password references" >&2
+	exit 1
+fi
+
+# Show loaded variables if verbose mode is enabled
+if [[ "$VERBOSE" == "true" ]]; then
+	echo -e "${GREEN}Loaded environment variables:${NC}"
+	echo "$env_vars" | sed 's/=.*/=***/' | sed 's/^/  /'
+	echo
+fi
+
+echo -e "${GREEN}Executing command with injected secrets...${NC}"
+
+# Execute the command with injected environment variables
+# Using a subshell to avoid polluting the current environment
+(
+	# Export all the variables
+	export $(echo "$env_vars" | xargs)
+
+	# Print for debugging 
+	printenv
+
+	# run the command 
+	exec $@    
+)
