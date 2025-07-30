@@ -158,9 +158,6 @@ echo -e "${GREEN}Executing command with injected secrets...${NC}"
 	# Export all the variables
 	export $(echo "$env_vars" | xargs)
 
-	# Print for debugging 
-	printenv
-
 	# run the command 
 	exec $@    
 )
