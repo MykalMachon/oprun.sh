@@ -35,7 +35,7 @@ fi
 
 # Help message
 show_help() {
-	cat << EOF
+	echo -e "
 ${BLUE}oprun${NC} - 1Password inject wrapper (WSL-friendly op run alternative)
 
 ${YELLOW}USAGE:${NC}
@@ -62,8 +62,7 @@ ${YELLOW}SETUP:${NC}
 	1. Make sure 1Password CLI is installed and authenticated
 	2. Create a .env.template file in your project
 	3. Run: oprun your-command
-
-EOF
+"
 }
 
 # Parse command line arguments
