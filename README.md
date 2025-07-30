@@ -140,6 +140,4 @@ While this emulates the spirit of the 1Password CLI's `op run` command it doesn'
 
 ### Injected secrets will not be omitted from STDOUT
 
-In the native 1Password CLI's `op run` command all instances of your secret are omitted or "masked" unless you use the `--no-masking` flag. This implementation does not do any masking at all.
-
-This might be something we can implement in the future but for now it's just something to keep in mind. Don't log your secrets.
+In the native 1Password CLI's `op run` command all instances of your secret are omitted or "masked" unless you use the `--no-masking` flag. This implementation does not do any masking at all. This is something we may be able to implement down the line.
